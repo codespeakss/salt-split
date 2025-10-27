@@ -22,8 +22,8 @@ public class OrderFileReaderExample {
     // 已知店铺权重：根据订单数量大致设置
     static Map<String, Integer> shopWeights = new HashMap<>();
     static {
-        shopWeights.put("Shop-A", 1); // 小店，不拆分
-        shopWeights.put("Shop-B", 10); // 热点大店，拆成 10 个子 key
+        shopWeights.put("Shop-A", 2); // 小店，不拆分
+        shopWeights.put("Shop-B", 4); // 热点大店，拆成 4 个子 key
         shopWeights.put("Shop-C", 1); // 小店，不拆分
     }
 
@@ -76,16 +76,26 @@ public class OrderFileReaderExample {
             }
         });
 
-        // 自定义 KeySelector 做权重负载均衡
+        // 在子 key 聚合前记录分配情况（为排查/调试）
         DataStream<Tuple2<String, Integer>> partialSum = orders
-                .keyBy(order -> {
-                    int weight = shopWeights.getOrDefault(order.f0, 1);
-                    if (weight > 1) {
-                        int prefix = random.nextInt(weight); // 拆分到多个子 key
-                        return prefix + "_" + order.f0;
+                .map(new MapFunction<Tuple2<String, Integer>, Tuple2<String, Integer>>() {
+                    @Override
+                    public Tuple2<String, Integer> map(Tuple2<String, Integer> order) throws Exception {
+                        int weight = shopWeights.getOrDefault(order.f0, 1);
+                        if (weight > 1) {
+                            int prefix = random.nextInt(weight); // 拆分到多个子 key
+                            String subKey = prefix + "_" + order.f0;
+                            // 在这里打印分配到的子 key，便于调试子 key 聚合前的分布
+                            System.out.println(String.format("[Pre-agg] 分配子 key: %s, 原店铺: %s, 金额: %d", subKey, order.f0, order.f1));
+                            return Tuple2.of(subKey, order.f1);
+                        } else {
+                            // 对于不拆分的店铺，也打印一条信息以便观察
+                            System.out.println(String.format("[Pre-agg] 未拆分, 使用原 key: %s, 金额: %d", order.f0, order.f1));
+                            return order;
+                        }
                     }
-                    return order.f0;
                 })
+                .keyBy(t -> t.f0)
                 .sum(1);
 
         // 去掉前缀做全局聚合
