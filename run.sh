@@ -3,6 +3,9 @@
 
 set -e
 
+echo "清理 target 目录... "
+rm -rf target
+
 echo "🚀 构建中..."
 mvn clean package -DskipTests
 
