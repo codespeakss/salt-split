@@ -14,28 +14,32 @@ public class SaltedWeightedSplitExample {
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
         DataStream<Tuple2<String, Integer>> input = env.fromElements(
-                Tuple2.of("userA", 1),
-                Tuple2.of("userB", 5),
-                Tuple2.of("userC", 3)
+                Tuple2.of("Shop-A", 1),
+                Tuple2.of("Shop-B", 20),
+                Tuple2.of("Shop-C", 2)
         );
 
-        DataStream<Tuple2<String, Integer>> salted = input.flatMap(new FlatMapFunction<Tuple2<String, Integer>, Tuple2<String, Integer>>() {
+        DataStream<Tuple2<String, Integer>> orders = input.flatMap(new FlatMapFunction<Tuple2<String, Integer>, Tuple2<String, Integer>>() {
             Random random = new Random();
 
             @Override
             public void flatMap(Tuple2<String, Integer> value, Collector<Tuple2<String, Integer>> out) throws Exception {
-                int weight = value.f1;
-                for (int i = 0; i < weight; i++) {
-                    int salt = random.nextInt(weight);
-                    out.collect(Tuple2.of(value.f0 + "_" + salt, value.f1));
+                String shop = value.f0;
+                int count = value.f1;
+                for (int i = 0; i < count; i++) {
+                    int amount = random.nextInt(101); // 0..100
+                    System.out.printf("Order -> shop=%s amount=%d%n", shop, amount);
+                    out.collect(Tuple2.of(shop, amount));
                 }
             }
         });
 
-        salted
-                .keyBy(t -> t.f0)
-                .sum(1)
-                .print();
+        // Aggregate total amount per shop （ Upsert ）
+        orders
+        .keyBy(t -> t.f0)
+        .sum(1)
+        .map(t -> String.format("店铺: %s 总额: %d", t.f0, t.f1))
+        .print();
 
         env.execute("Salted Weighted Split Example");
     }
